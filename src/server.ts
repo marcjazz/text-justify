@@ -1,5 +1,7 @@
 import express, { Request, Response, NextFunction } from "express";
 import jwt from "jsonwebtoken";
+import swaggerJsdoc from "swagger-jsdoc";
+import swaggerUi from "swagger-ui-express";
 import { justifyText } from "@/services/justify-engine";
 import { IRateLimitStore } from "@rate-limiter/rate-limit-store.interface";
 import { InMemoryRateLimiterStore } from "@rate-limiter/impl/in-memory-rate-limit-store";
@@ -7,10 +9,35 @@ import { RedisRateLimiterStore } from "@rate-limiter/impl/redis-rate-limit-store
 
 const app = express();
 const PORT = process.env.PORT || 3000;
-const getJwtSecret = () => process.env.JWT_SECRET || "super-secret-key";
+const JWT_SECRET = process.env.JWT_SECRET || "super-secret-key";
 
-app.use(express.text());
+// Swagger configuration
+const swaggerOptions = {
+  definition: {
+    openapi: "3.0.0",
+    info: {
+      title: "Text Justification API",
+      version: "1.0.0",
+      description: "A simple API to justify text and handle rate limiting.",
+    },
+    components: {
+      securitySchemes: {
+        bearerAuth: {
+          type: "http",
+          scheme: "bearer",
+          bearerFormat: "JWT",
+        },
+      },
+    },
+  },
+  apis: ["./src/server.ts"], // files containing annotations
+};
+
+const swaggerSpec = swaggerJsdoc(swaggerOptions);
+app.use("/api-docs", swaggerUi.serve, swaggerUi.setup(swaggerSpec));
+
 app.use(express.json());
+app.use(express.text());
 
 // Initialize store based on environment
 const REDIS_URL = process.env.REDIS_URL;
@@ -21,20 +48,6 @@ export const rateLimitStore: IRateLimitStore = REDIS_URL
 const DAILY_WORD_LIMIT = 80000;
 
 /**
- * Middleware: Request Body Validation
- */
-const validateRequestBody = (
-  req: Request,
-  res: Response,
-  next: NextFunction
-) => {
-  if (typeof req.body !== "string" || req.body.trim().length === 0) {
-    return res.status(400).send("Request body must be plain text");
-  }
-  next();
-};
-
-/**
  * Middleware: Authentication
  */
 const authenticateToken = (req: Request, res: Response, next: NextFunction) => {
@@ -43,7 +56,7 @@ const authenticateToken = (req: Request, res: Response, next: NextFunction) => {
 
   if (!token) return res.sendStatus(401);
 
-  jwt.verify(token, getJwtSecret(), (err: any, user: any) => {
+  jwt.verify(token, JWT_SECRET, (err: any, user: any) => {
     if (err) return res.sendStatus(403);
     (req as any).user = user;
     (req as any).token = token;
@@ -55,12 +68,10 @@ const authenticateToken = (req: Request, res: Response, next: NextFunction) => {
  * Middleware: Rate Limiting
  */
 const rateLimiter = async (req: Request, res: Response, next: NextFunction) => {
-  const token = (req as any).token;
+  const user = (req as any).user;
   const text = req.body;
 
   if (typeof text !== "string") {
-    // This case should ideally be caught by validateRequestBody before,
-    // but a non-text content-type might bypass validateRequestBody if it's placed after express.json
     return res.status(400).send("Request body must be plain text");
   }
 
@@ -68,14 +79,13 @@ const rateLimiter = async (req: Request, res: Response, next: NextFunction) => {
   const today = new Date().toISOString().split("T")[0];
 
   try {
-    const currentWordCount = await rateLimitStore.getWordCount(token, today);
+    const currentWordCount = await rateLimitStore.getWordCount(user.email, today);
 
     if (currentWordCount + wordCount > DAILY_WORD_LIMIT) {
       return res.status(402).send("Payment Required: Rate limit exceeded");
     }
 
-    await rateLimitStore.incrementWordCount(token, wordCount, today);
-    (req as any).wordCount = wordCount;
+    await rateLimitStore.incrementWordCount(user.email, wordCount, today);
     next();
   } catch (error) {
     console.error("Rate Limiter Error:", error);
@@ -84,7 +94,30 @@ const rateLimiter = async (req: Request, res: Response, next: NextFunction) => {
 };
 
 /**
- * POST /api/token
+ * @openapi
+ * /api/token:
+ *   post:
+ *     summary: Generate a JWT token
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               email:
+ *                 type: string
+ *                 example: user@example.com
+ *     responses:
+ *       200:
+ *         description: JWT token generated successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 token:
+ *                   type: string
  */
 app.post("/api/token", (req: Request, res: Response) => {
   const { email } = req.body;
@@ -93,27 +126,46 @@ app.post("/api/token", (req: Request, res: Response) => {
     return res.status(400).send("Email is required");
   }
 
-  const token = jwt.sign({ email }, getJwtSecret());
+  const token = jwt.sign({ email }, JWT_SECRET);
   res.json({ token });
 });
 
 /**
- * POST /api/justify
+ * @openapi
+ * /api/justify:
+ *   post:
+ *     summary: Justify text
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         text/plain:
+ *           schema:
+ *             type: string
+ *             example: "This is a long text that needs to be justified to 80 characters per line."
+ *     responses:
+ *       200:
+ *         description: Justified text
+ *         content:
+ *           text/plain:
+ *             schema:
+ *               type: string
+ *       400:
+ *         description: Bad Request (Invalid input)
+ *       401:
+ *         description: Unauthorized
+ *       402:
+ *         description: Payment Required (Rate limit exceeded)
  */
 app.post(
   "/api/justify",
-  validateRequestBody,
   authenticateToken,
   rateLimiter,
   (req: Request, res: Response) => {
     const text = req.body;
-    const token = (req as any).token;
-    const wordCount = (req as any).wordCount;
-
     try {
       const justifiedLines = justifyText(text, 80);
-      // The rateLimitStore.incrementWordCount is now handled inside the rateLimiter middleware,
-      // so we don't need to do it here again.
       res.type("text/plain").send(justifiedLines.join("\n"));
     } catch (error: any) {
       res.status(500).send(error.message);
@@ -127,6 +179,3 @@ const server = app.listen(PORT, () => {
 
 export default app;
 export { server };
-
-
-
