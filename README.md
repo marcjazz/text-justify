@@ -69,7 +69,7 @@ The API enforces a rate limit of 80,000 words per user per day for the `/api/jus
 
 1.  **Clone the repository:**
     ```bash
-    git clone https://github.com/your-username/text-justify.git
+    git clone https://github.com/marcjazz/text-justify.git
     cd text-justify
     ```
 
