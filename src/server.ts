@@ -73,7 +73,12 @@ app.post('/api/token', (req: Request, res: Response) => {
 /**
  * POST /api/justify
  */
-app.post('/api/justify', authenticateToken, rateLimiter, (req: Request, res: Response) => {
+app.post('/api/justify', (req: Request, res: Response, next: NextFunction) => {
+    if (typeof req.body !== 'string' || req.body.trim().length === 0) {
+        return res.status(400).send('Request body must be plain text');
+    }
+    next();
+}, authenticateToken, rateLimiter, (req: Request, res: Response) => {
     const text = req.body;
     const token = (req as any).token;
     const wordCount = (req as any).wordCount;
