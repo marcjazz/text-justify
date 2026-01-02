@@ -1,7 +1,7 @@
 module.exports = {
   preset: 'ts-jest',
   testEnvironment: 'node',
-  testMatch: ['**/?(*.)+(spec|test).[jt]s?(x)'],
+  testMatch: ['<rootDir>/src/**/?(*.)+(spec|test).ts'],
   collectCoverage: true,
   coverageReporters: ['json', 'lcov', 'text', 'clover'],
   coverageDirectory: 'coverage',
