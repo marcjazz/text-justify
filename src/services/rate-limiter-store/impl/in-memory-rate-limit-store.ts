@@ -1,4 +1,4 @@
-import { IRateLimitStore } from "../rate-limit-store.interface";
+import { IRateLimitStore } from "@rate-limiter/rate-limit-store.interface";
 
 export class InMemoryRateLimiterStore implements IRateLimitStore {
   private store: Record<string, { count: number; date: string }> = {};

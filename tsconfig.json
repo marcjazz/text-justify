@@ -8,7 +8,12 @@
     "esModuleInterop": true,
     "skipLibCheck": true,
     "forceConsistentCasingInFileNames": true,
-    "types": ["jest", "node"]
+    "types": ["jest", "node"],
+    "baseUrl": ".",
+    "paths": {
+      "@/*": ["src/*"],
+      "@rate-limiter/*": ["src/services/rate-limiter-store/*"]
+    }
   },
   "include": ["src/**/*"],
   "exclude": ["node_modules"]

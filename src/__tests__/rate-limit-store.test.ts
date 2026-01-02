@@ -1,6 +1,6 @@
-import { IRateLimitStore } from '../services/rate-limiter-store/rate-limit-store.interface';
-import { InMemoryRateLimiterStore } from '../services/rate-limiter-store/impl/in-memory-rate-limit-store';
-import { RedisRateLimiterStore } from '../services/rate-limiter-store/impl/redis-rate-limit-store';
+import { IRateLimitStore } from '@rate-limiter/rate-limit-store.interface';
+import { InMemoryRateLimiterStore } from '@rate-limiter/impl/in-memory-rate-limit-store';
+import { RedisRateLimiterStore } from '@rate-limiter/impl/redis-rate-limit-store';
 
 // Mock Redis client
 const mockRedisClient = {

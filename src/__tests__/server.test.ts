@@ -1,7 +1,7 @@
 import request from 'supertest';
-import app, { server, rateLimitStore } from '../server';
+import app, { server, rateLimitStore } from '@/server';
 import * as jwt from 'jsonwebtoken';
-import { justifyText } from '../services/justify-engine';
+import { justifyText } from '@/services/justify-engine';
 
 // Mock jsonwebtoken to control token generation and verification
 jest.mock('jsonwebtoken', () => ({

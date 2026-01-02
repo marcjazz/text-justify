@@ -1,5 +1,5 @@
 import { createClient, RedisClientType } from 'redis';
-import { IRateLimitStore } from '../rate-limit-store.interface';
+import { IRateLimitStore } from '@rate-limiter/rate-limit-store.interface';
 
 export class RedisRateLimiterStore implements IRateLimitStore {
     private client: RedisClientType;
