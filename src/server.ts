@@ -4,7 +4,7 @@ import { justifyText } from './services/justify_engine';
 
 const app = express();
 const PORT = process.env.PORT || 3000;
-const JWT_SECRET = process.env.JWT_SECRET || 'super-secret-key';
+const getJwtSecret = () => process.env.JWT_SECRET || 'super-secret-key';
 
 app.use(express.text());
 app.use(express.json());
@@ -22,7 +22,7 @@ const authenticateToken = (req: Request, res: Response, next: NextFunction) => {
 
     if (!token) return res.sendStatus(401);
 
-    jwt.verify(token, JWT_SECRET, (err: any, user: any) => {
+    jwt.verify(token, getJwtSecret(), (err: any, user: any) => {
         if (err) return res.sendStatus(403);
         (req as any).user = user;
         (req as any).token = token;
@@ -66,7 +66,7 @@ app.post('/api/token', (req: Request, res: Response) => {
         return res.status(400).send('Email is required');
     }
 
-    const token = jwt.sign({ email }, JWT_SECRET);
+    const token = jwt.sign({ email }, getJwtSecret());
     res.json({ token });
 });
 
