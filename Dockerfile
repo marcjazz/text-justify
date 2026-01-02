@@ -3,22 +3,22 @@ FROM node:22-alpine AS builder
 
 WORKDIR /app
 
-# Enable Corepack to use the version of Yarn specified in package.json
+# Enable Corepack
 RUN corepack enable
 
 # Copy configuration files
 COPY package.json yarn.lock .yarnrc.yml ./
 COPY .yarn .yarn
 
-# Install dependencies (including devDependencies for build)
+# Install all dependencies for build
 RUN yarn install --immutable
 
 # Copy source code and config
-COPY tsconfig.json ./
+COPY tsconfig.json rollup.config.mjs ./
 COPY src ./src
 
-# Build the TypeScript code
-RUN yarn tsc
+# Build the bundled code
+RUN yarn build
 
 # Stage 2: Production
 FROM node:22-alpine AS production
@@ -28,18 +28,9 @@ WORKDIR /app
 # Set environment to production
 ENV NODE_ENV=production
 
-# Enable Corepack
-RUN corepack enable
-
-# Copy only the compiled output
-COPY --from=builder /app/dist ./dist
-
-# Copy package management files for production install
-COPY package.json yarn.lock .yarnrc.yml ./
-COPY .yarn .yarn
-
-# Install only production dependencies
-RUN yarn install --immutable --production
+# Copy only the bundled output from the builder
+COPY --from=builder /app/dist/server.js ./dist/server.js
+COPY --from=builder /app/dist/server.js.map ./dist/server.js.map
 
 # Expose the application port
 EXPOSE 3000
