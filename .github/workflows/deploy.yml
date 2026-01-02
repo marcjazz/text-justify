@@ -2,37 +2,63 @@ name: Build and Push to GAR
 
 on:
   push:
-    branches: [ "master" ]
-
-env:
-  PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }} # Update this secret in GitHub
-  GAR_LOCATION: europe-west1 # Update to your region
-  REPOSITORY: text-justify # Update to your GAR repository name
-  IMAGE: text-justify
+    branches:
+      - 'master'
+    paths-ignore:
+      - 'README.md'
+      - '.gitignore'
 
 jobs:
-  deploy:
+  build-and-push-image:
+    env:
+      GCP_PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
+      GCP_REGION: ${{ vars.GCP_REGION || 'europe-west1' }}
+      GAR_REGISTRY: ${{ vars.GCP_REGION || 'europe-west1' }}-docker.pkg.dev/${{ vars.GCP_PROJECT_ID }}
+      REPOSITORY: playgroud-gar
+      IMAGE: text-justify
+
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+      id-token: write
+
     steps:
-      - name: Checkout
+      - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Google Auth
-        id: auth
-        uses: google-github-actions/auth@v2
+      - name: Authenticate to Google Cloud
+        id: "auth"
+        uses: "google-github-actions/auth@v2"
         with:
-          credentials_json: ${{ secrets.GCP_SA_KEY }} # Update this secret in GitHub
+          token_format: "access_token"
+          project_id: ${{ vars.GCP_PROJECT_ID }}
+          workload_identity_provider: "projects/${{ secrets.GCP_PROJECT_NUMBER }}/locations/global/workloadIdentityPools/${{ secrets.WIP_POOL }}/providers/${{ secrets.WIP_PROVIDER }}"
+          service_account: ${{ secrets.GHA_SERVICE_ACCOUNT }}
 
-      - name: Set up Cloud SDK
-        uses: google-github-actions/setup-gcloud@v2
+      - name: Log in to the Container registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.GAR_REGISTRY }}
+          username: 'oauth2accesstoken'
+          password: ${{ steps.auth.outputs.access_token }}
 
-      - name: Configure Docker
-        run: |
-          gcloud auth configure-docker ${{ env.GAR_LOCATION }}-docker.pkg.dev
+      - name: Extract metadata (tags, labels) for Docker
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.GAR_REGISTRY }}/${{ env.REPOSITORY }}/${{ env.IMAGE }}
+          tags: |
+            type=ref,event=branch
+            type=sha,prefix=,suffix=,format=short
+            type=raw,value=latest,enable=${{ github.ref == 'refs/heads/master' }}
 
-      - name: Build and Push Container
-        run: |-
-          docker build -t "${{ env.GAR_LOCATION }}-docker.pkg.dev/${{ env.PROJECT_ID }}/${{ env.REPOSITORY }}/${{ env.IMAGE }}:${{ github.sha }}" .
-          docker push "${{ env.GAR_LOCATION }}-docker.pkg.dev/${{ env.PROJECT_ID }}/${{ env.REPOSITORY }}/${{ env.IMAGE }}:${{ github.sha }}"
-          docker tag "${{ env.GAR_LOCATION }}-docker.pkg.dev/${{ env.PROJECT_ID }}/${{ env.REPOSITORY }}/${{ env.IMAGE }}:${{ github.sha }}" "${{ env.GAR_LOCATION }}-docker.pkg.dev/${{ env.PROJECT_ID }}/${{ env.REPOSITORY }}/${{ env.IMAGE }:latest"
-          docker push "${{ env.GAR_LOCATION }}-docker.pkg.dev/${{ env.PROJECT_ID }}/${{ env.REPOSITORY }}/${{ env.IMAGE }}:latest"
+      - name: Build and push Docker image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
