@@ -68,4 +68,10 @@ describe('justifyText', () => {
     const expected = ['hello     world'];
     expect(justifyText(text, width)).toEqual(expected);
   });
+
+  it('should throw an error for non-positive maxLength', () => {
+    const text = 'any text';
+    expect(() => justifyText(text, 0)).toThrow('Line length must be greater than zero.');
+    expect(() => justifyText(text, -10)).toThrow('Line length must be greater than zero.');
+  });
 });
