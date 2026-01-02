@@ -1,8 +1,8 @@
 # Text Justification API
 
-[![Build and Push to GAR](https://github.com/marcjazz/text-justify/actions/workflows/deploy.yml/badge.svg)](https://github.com/marcjazz/text-justify/actions/workflows/deploy.yml)
-[![Coverage](https://img.shields.io/badge/coverage-96.8%25-brightgreen)](https://github.com/marcjazz/text-justify)
-[![Deployment](https://img.shields.io/badge/deployed-Google%20Cloud%20Run-blue)](https://text-justify-269839566523.europe-west1.run.app/api-docs/)
+[![Publish and Deploy](https://github.com/marcjazz/text-justify/actions/workflows/deploy.yml/badge.svg)](https://github.com/marcjazz/text-justify/actions/workflows/deploy.yml)
+[![CI status](https://github.com/marcjazz/text-justify/actions/workflows/ci.yml/badge.svg)](https://github.com/marcjazz/text-justify/actions/workflows/ci.yml)
+[![codecov](https://codecov.io/gh/marcjazz/text-justify/branch/master/graph/badge.svg)](https://codecov.io/gh/marcjazz/text-justify)
 
 This project provides a REST API for text justification. It takes a plain text as input and returns the text justified to a line length of 80 characters.
 

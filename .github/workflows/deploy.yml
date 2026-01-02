@@ -1,4 +1,4 @@
-name: Build and Push to GAR
+name: Publish and Deploy
 
 on:
   push:
@@ -7,16 +7,11 @@ on:
     paths-ignore:
       - "README.md"
       - ".gitignore"
+  release:
+    types: [published]
 
 jobs:
-  build-and-push-image:
-    env:
-      GCP_PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
-      GCP_REGION: ${{ vars.GCP_REGION || 'europe-west1' }}
-      GAR_REGISTRY: ${{ vars.GCP_REGION || 'europe-west1' }}-docker.pkg.dev/${{ vars.GCP_PROJECT_ID }}
-      REPOSITORY: playgroud-gar
-      IMAGE: text-justify
-
+  publish-image:
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -27,6 +22,13 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
       - name: Authenticate to Google Cloud
         id: "auth"
         uses: "google-github-actions/auth@v2"
@@ -36,10 +38,10 @@ jobs:
           workload_identity_provider: "projects/${{ secrets.GCP_PROJECT_NUMBER }}/locations/global/workloadIdentityPools/${{ secrets.WIP_POOL }}/providers/${{ secrets.WIP_PROVIDER }}"
           service_account: ${{ secrets.GHA_SERVICE_ACCOUNT }}
 
-      - name: Log in to the Container registry
+      - name: Log in to GAR
         uses: docker/login-action@v3
         with:
-          registry: ${{ env.GAR_REGISTRY }}
+          registry: ${{ vars.GCP_REGION || 'europe-west1' }}-docker.pkg.dev
           username: "oauth2accesstoken"
           password: ${{ steps.auth.outputs.access_token }}
 
@@ -50,10 +52,14 @@ jobs:
         id: meta
         uses: docker/metadata-action@v5
         with:
-          images: ${{ env.GAR_REGISTRY }}/${{ env.REPOSITORY }}/${{ env.IMAGE }}
+          images: |
+            ghcr.io/${{ github.repository }}
+            ${{ vars.GCP_REGION || 'europe-west1' }}-docker.pkg.dev/${{ vars.GCP_PROJECT_ID }}/playgroud-gar/text-justify
           tags: |
             type=ref,event=branch
             type=sha,prefix=,suffix=,format=short
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
             type=raw,value=latest,enable=${{ github.ref == 'refs/heads/master' }}
 
       - name: Build and push Docker image
@@ -65,3 +71,47 @@ jobs:
           labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
+
+  deploy:
+    needs: publish-image
+    env:
+      GCP_PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
+      GCP_REGION: ${{ vars.GCP_REGION || 'europe-west1' }}
+
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Extract metadata (tags, labels) for Docker
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ vars.GCP_REGION || 'europe-west1' }}-docker.pkg.dev/${{ vars.GCP_PROJECT_ID }}/playgroud-gar/text-justify
+          tags: |
+            type=ref,event=branch
+            type=sha,prefix=,suffix=,format=short
+            type=semver,pattern={{version}}
+            type=raw,value=latest,enable=${{ github.ref == 'refs/heads/master' }}
+
+      - name: Authenticate to Google Cloud
+        id: "auth"
+        uses: "google-github-actions/auth@v2"
+        with:
+          workload_identity_provider: "projects/${{ secrets.GCP_PROJECT_NUMBER }}/locations/global/workloadIdentityPools/${{ secrets.WIP_POOL }}/providers/${{ secrets.WIP_PROVIDER }}"
+          service_account: ${{ secrets.GHA_SERVICE_ACCOUNT }}
+
+      - name: Deploy to Cloud Run
+        id: deploy
+        uses: google-github-actions/deploy-cloudrun@v2
+        with:
+          service: text-justify
+          image: ${{ fromJSON(steps.meta.outputs.json).tags[0] }}
+          region: ${{ env.GCP_REGION }}
+
+      - name: Show Output
+        run: echo ${{ steps.deploy.outputs.url }}
