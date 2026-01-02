@@ -10,7 +10,7 @@ app.use(express.text());
 app.use(express.json());
 
 // In-memory store for rate limiting: { token: { count: number, date: string } }
-const rateLimitStore: Record<string, { count: number, date: string }> = {};
+export const rateLimitStore: Record<string, { count: number, date: string }> = {};
 const DAILY_WORD_LIMIT = 80000;
 
 /**
