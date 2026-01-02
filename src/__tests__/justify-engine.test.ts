@@ -1,4 +1,4 @@
-import { justifyText } from '../services/justify_engine';
+import { justifyText } from '../services/justify-engine';
 
 describe('justifyText', () => {
   it('should justify a single line of text', () => {
