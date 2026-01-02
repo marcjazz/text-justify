@@ -1,14 +1,11 @@
 import request from 'supertest';
-import app from '../server'; // Import the app from server.ts
-import jwt from 'jsonwebtoken';
+import app, { server } from '../server'; // Import the app and server from server.ts
+import * as jwt from 'jsonwebtoken';
 
 // Mock jsonwebtoken to control token generation and verification
 jest.mock('jsonwebtoken', () => ({
-  __esModule: true,
-  default: {
-    sign: jest.fn(),
-    verify: jest.fn(),
-  },
+  sign: jest.fn(),
+  verify: jest.fn(),
 }));
 
 describe('API Endpoints', () => {
@@ -106,6 +103,5 @@ describe('API Endpoints', () => {
 
 afterAll(() => {
   // Close the server after all tests are done to prevent open handle issues
-  const { server } = require('../server');
   server.close();
 });
