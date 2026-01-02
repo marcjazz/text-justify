@@ -4,9 +4,11 @@ import jwt from 'jsonwebtoken';
 
 // Mock jsonwebtoken to control token generation and verification
 jest.mock('jsonwebtoken', () => ({
-  ...jest.requireActual('jsonwebtoken'),
-  verify: jest.fn(),
-  sign: jest.fn(),
+  __esModule: true,
+  default: {
+    sign: jest.fn(),
+    verify: jest.fn(),
+  },
 }));
 
 describe('API Endpoints', () => {
@@ -100,4 +102,10 @@ describe('API Endpoints', () => {
     expect(res.statusCode).toEqual(400);
     expect(res.text).toContain('Request body must be plain text');
   });
+});
+
+afterAll(() => {
+  // Close the server after all tests are done to prevent open handle issues
+  const { server } = require('../server');
+  server.close();
 });
