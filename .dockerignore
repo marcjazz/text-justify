@@ -1,0 +1,16 @@
+node_modules
+dist
+.yarn/cache
+.yarn/install-state.gz
+.yarn/unplugged
+.pnp.*
+.env
+coverage
+*.log
+.git
+.gitignore
+.editorconfig
+.gitattributes
+README.md
+jest.config.js
+src/__tests__
