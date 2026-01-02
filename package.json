@@ -6,7 +6,8 @@
     "jsonwebtoken": "^9.0.3"
   },
   "scripts": {
-    "test": "jest --detectOpenHandles --forceExit"
+    "test": "jest --detectOpenHandles --forceExit",
+    "build": "tsc"
   },
   "devDependencies": {
     "@types/express": "^5.0.6",
