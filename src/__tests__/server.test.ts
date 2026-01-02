@@ -1,8 +1,8 @@
 import request from 'supertest';
-import app, { server, rateLimitStore } from '../server'; // Import the app, server, and rateLimitStore from server.ts
+import app, { server, rateLimitStore } from '../server';
 import * as jwt from 'jsonwebtoken';
 import { justifyText } from '../services/justify_engine';
-import { InMemoryRateLimitStore } from '../services/in-memory-rate-limit-store'; // Import the concrete class
+import { InMemoryRateLimitStore } from '../services/in-memory-rate-limit-store';
 
 // Mock jsonwebtoken to control token generation and verification
 jest.mock('jsonwebtoken', () => ({
@@ -15,37 +15,32 @@ jest.mock('../services/justify_engine', () => ({
   justifyText: jest.fn(),
 }));
 
-// Mock the InMemoryRateLimitStore to control its behavior in tests
-jest.mock('../services/in-memory-rate-limit-store', () => {
-  return {
-    InMemoryRateLimitStore: jest.fn().mockImplementation(() => {
-      // Return an object that has the same interface but with jest.fn() for methods
-      return {
-        getWordCount: jest.fn(),
-        incrementWordCount: jest.fn(),
-        resetStore: jest.fn(),
-      };
-    }),
-  };
-});
-
-
 describe('API Endpoints', () => {
   let token: string;
   const MOCK_SECRET_KEY = 'mock-secret-key';
   const MOCK_IP = '::1'; // Consistent IP for testing
 
-  beforeEach(async () => {
-    // Reset mocks before each test
-    (jwt.sign as jest.Mock).mockReset();
-    (jwt.verify as jest.Mock).mockReset();
-    (justifyText as jest.Mock).mockReset();
-    
-    // Reset the rate limit store using its mocked method
-    await rateLimitStore.resetStore();
-    (rateLimitStore.getWordCount as jest.Mock).mockReset();
-    (rateLimitStore.incrementWordCount as jest.Mock).mockReset();
+  // Spy on the methods of the actual rateLimitStore instance
+  let getWordCountSpy: jest.SpyInstance;
+  let incrementWordCountSpy: jest.SpyInstance;
+  let resetStoreSpy: jest.SpyInstance;
 
+  beforeEach(async () => {
+    // Clear all mocks and reset spies
+    jest.clearAllMocks();
+    
+    // Spy on the methods of the actual rateLimitStore instance
+    getWordCountSpy = jest.spyOn(rateLimitStore, 'getWordCount');
+    incrementWordCountSpy = jest.spyOn(rateLimitStore, 'incrementWordCount');
+    resetStoreSpy = jest.spyOn(rateLimitStore, 'resetStore');
+
+    // Default mock implementations for the spied methods
+    getWordCountSpy.mockResolvedValue(0);
+    incrementWordCountSpy.mockResolvedValue(undefined);
+    resetStoreSpy.mockResolvedValue(undefined); // Ensure resetStore works
+
+    // Reset the store explicitly
+    await rateLimitStore.resetStore();
 
     // Mock jwt.sign to return a consistent token for testing
     (jwt.sign as jest.Mock).mockReturnValue('mock-token');
@@ -62,13 +57,15 @@ describe('API Endpoints', () => {
     // Mock justifyText to return a simple result
     (justifyText as jest.Mock).mockReturnValue(['justified text']);
 
-    // Mock InMemoryRateLimitStore methods to return default values or resolve
-    (rateLimitStore.getWordCount as jest.Mock).mockResolvedValue(0);
-    (rateLimitStore.incrementWordCount as jest.Mock).mockResolvedValue(undefined);
-    (rateLimitStore.resetStore as jest.Mock).mockResolvedValue(undefined);
-
     // Set environment variable for JWT secret
     process.env.JWT_SECRET = MOCK_SECRET_KEY;
+  });
+
+  afterEach(() => {
+    // Restore original implementations after each test
+    getWordCountSpy.mockRestore();
+    incrementWordCountSpy.mockRestore();
+    resetStoreSpy.mockRestore();
   });
 
   it('should return a token on POST /api/token', async () => {
@@ -101,14 +98,13 @@ describe('API Endpoints', () => {
     expect(res.text).toEqual('justified text');
     expect(jwt.verify).toHaveBeenCalledWith(token, MOCK_SECRET_KEY, expect.any(Function));
     expect(justifyText).toHaveBeenCalledWith(textToJustify, 80);
-    expect(rateLimitStore.incrementWordCount).toHaveBeenCalled();
+    expect(incrementWordCountSpy).toHaveBeenCalled();
   });
 
   it('should return 401 for POST /api/justify without a token', async () => {
     const textToJustify = 'This is a sample text.';
     const res = await request(app)
       .post('/api/justify')
-      .set('Authorization', `Bearer ${token}`)
       .set('Content-Type', 'text/plain')
       .send(textToJustify);
 
@@ -123,7 +119,7 @@ describe('API Endpoints', () => {
     const textToJustify = 'This is a sample text.';
     const res = await request(app)
       .post('/api/justify')
-      .set('Authorization', `Bearer invalid-token`)
+      .set('Authorization', 'Bearer invalid-token')
       .set('Content-Type', 'text/plain')
       .send(textToJustify);
 
@@ -149,7 +145,8 @@ describe('API Endpoints', () => {
     const res = await request(app)
       .post('/api/justify')
       .set('Authorization', `Bearer ${token}`)
-      .send({ data: 'not a string' }); // Sending JSON to test the middleware
+      .set('Content-Type', 'application/json') // Sending JSON to test the middleware
+      .send({ data: 'not a string' }); 
 
     expect(res.statusCode).toEqual(400);
     expect(res.text).toContain('Request body must be plain text');
@@ -160,7 +157,7 @@ describe('API Endpoints', () => {
     const text = 'word '.repeat(100); // Small text, 100 words
     
     // Mock getWordCount to return a value that, with the current request, exceeds the limit
-    (rateLimitStore.getWordCount as jest.Mock).mockResolvedValue(79990); // Already 79990 words
+    getWordCountSpy.mockResolvedValueOnce(79990); // Already 79990 words
     // No need to mock incrementWordCount here, as it shouldn't be called
 
     // This request has 100 words, bringing total to 80090, exceeding 80000 limit
@@ -172,9 +169,9 @@ describe('API Endpoints', () => {
 
     expect(res.statusCode).toEqual(402);
     expect(res.text).toContain('Payment Required: Rate limit exceeded');
-    expect(rateLimitStore.getWordCount).toHaveBeenCalledWith(token, expect.any(String));
+    expect(getWordCountSpy).toHaveBeenCalledWith(token, expect.any(String));
     // Verify that incrementWordCount was NOT called because limit was exceeded
-    expect(rateLimitStore.incrementWordCount).not.toHaveBeenCalled();
+    expect(incrementWordCountSpy).not.toHaveBeenCalled();
   });
 
   it('should return 500 if justifyText service throws an error', async () => {
@@ -197,7 +194,7 @@ describe('API Endpoints', () => {
   it('should return 500 if rateLimitStore.getWordCount throws an error', async () => {
     token = 'mock-token';
     const error = new Error('Rate limit store error');
-    (rateLimitStore.getWordCount as jest.Mock).mockRejectedValue(error);
+    getWordCountSpy.mockRejectedValueOnce(error);
 
     const res = await request(app)
       .post('/api/justify')
@@ -212,7 +209,7 @@ describe('API Endpoints', () => {
   it('should return 500 if rateLimitStore.incrementWordCount throws an error', async () => {
     token = 'mock-token';
     const error = new Error('Rate limit store error');
-    (rateLimitStore.incrementWordCount as jest.Mock).mockRejectedValue(error);
+    incrementWordCountSpy.mockRejectedValueOnce(error);
 
     const res = await request(app)
       .post('/api/justify')
@@ -223,7 +220,7 @@ describe('API Endpoints', () => {
     expect(res.statusCode).toEqual(500);
     expect(res.text).toContain('Internal Server Error');
   });
-
+  
   it('should correctly filter out empty strings from word count', async () => {
     token = 'mock-token';
     // Mock String.prototype.split to return an array that includes an empty string
@@ -239,7 +236,7 @@ describe('API Endpoints', () => {
     try {
       // We expect 2 words from 'word1', '', 'word2'
       // Mock getWordCount to ensure the rate limiter allows the request
-      (rateLimitStore.getWordCount as jest.Mock).mockResolvedValue(0);
+      getWordCountSpy.mockResolvedValue(0);
 
       const res = await request(app)
         .post('/api/justify')
@@ -248,7 +245,7 @@ describe('API Endpoints', () => {
         .send('word1 word2'); // Actual text doesn't matter much as split is mocked
 
       expect(res.statusCode).toEqual(200);
-      expect(rateLimitStore.incrementWordCount).toHaveBeenCalledWith(token, 2, expect.any(String)); // Check wordCount
+      expect(incrementWordCountSpy).toHaveBeenCalledWith(token, 2, expect.any(String)); // Check wordCount
     } finally {
       String.prototype.split = originalSplit; // Restore original split
     }
