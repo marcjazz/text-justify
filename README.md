@@ -1,5 +1,9 @@
 # Text Justification API
 
+[![Build and Push to GAR](https://github.com/marcjazz/text-justify/actions/workflows/deploy.yml/badge.svg)](https://github.com/marcjazz/text-justify/actions/workflows/deploy.yml)
+[![Coverage](https://img.shields.io/badge/coverage-96.8%25-brightgreen)](https://github.com/marcjazz/text-justify)
+[![Deployment](https://img.shields.io/badge/deployed-Google%20Cloud%20Run-blue)](https://text-justify-269839566523.europe-west1.run.app/api-docs/)
+
 This project provides a REST API for text justification. It takes a plain text as input and returns the text justified to a line length of 80 characters.
 
 ## Features
@@ -87,5 +91,5 @@ To run the test suite, you can execute the following command:
 
 ```bash
 docker build -t text-justify-api .
-docker run text-justify-api npm test
+docker run text-justify-api yarn test
 ```
