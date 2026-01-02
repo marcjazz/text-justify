@@ -1,8 +1,9 @@
 import express, { Request, Response, NextFunction } from "express";
 import jwt from "jsonwebtoken";
-import { justifyText } from "./services/justify_engine";
-import { IRateLimitStore } from "./services/rate-limit-store.interface";
-import { InMemoryRateLimitStore } from "./services/in-memory-rate-limit-store";
+import { justifyText } from "./services/justify-engine";
+import { IRateLimitStore } from "./services/rate-limiter-store/rate-limit-store.interface";
+import { InMemoryRateLimiterStore } from "./services/rate-limiter-store/impl/in-memory-rate-limit-store";
+import { RedisRateLimiterStore } from "./services/rate-limiter-store/impl/redis-rate-limit-store";
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -11,7 +12,12 @@ const getJwtSecret = () => process.env.JWT_SECRET || "super-secret-key";
 app.use(express.text());
 app.use(express.json());
 
-export const rateLimitStore: IRateLimitStore = new InMemoryRateLimitStore();
+// Initialize store based on environment
+const REDIS_URL = process.env.REDIS_URL;
+export const rateLimitStore: IRateLimitStore = REDIS_URL 
+    ? new RedisRateLimiterStore(REDIS_URL) 
+    : new InMemoryRateLimiterStore();
+
 const DAILY_WORD_LIMIT = 80000;
 
 /**
@@ -58,10 +64,7 @@ const rateLimiter = async (req: Request, res: Response, next: NextFunction) => {
     return res.status(400).send("Request body must be plain text");
   }
 
-  const wordCount = text
-    .trim()
-    .split(/\s+/)
-    .filter((w) => w.length > 0).length;
+  const wordCount = text.trim().split(/\s+/).length;
   const today = new Date().toISOString().split("T")[0];
 
   try {
