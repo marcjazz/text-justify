@@ -41,7 +41,7 @@ describe('API Endpoints', () => {
     // Mock jwt.verify to simulate a valid token by default
     (jwt.verify as jest.Mock).mockImplementation((token, secret, callback) => {
       if (token === 'mock-token' && secret === MOCK_SECRET_KEY) {
-        callback(null, { ip: MOCK_IP });
+        callback(null, { email: 'test@example.com', ip: MOCK_IP });
       } else {
         callback(new Error('Invalid token'));
       }
@@ -160,7 +160,7 @@ describe('API Endpoints', () => {
 
     expect(res.statusCode).toEqual(402);
     expect(res.text).toContain('Payment Required: Rate limit exceeded');
-    expect(getWordCountSpy).toHaveBeenCalledWith(token, expect.any(String));
+    expect(getWordCountSpy).toHaveBeenCalledWith('test@example.com', expect.any(String));
     expect(incrementWordCountSpy).not.toHaveBeenCalled();
   });
 
@@ -213,5 +213,7 @@ describe('API Endpoints', () => {
 });
 
 afterAll(() => {
-  server.close();
+  if (server) {
+    server.close();
+  }
 });

@@ -7,10 +7,11 @@ import { justifyText } from "@/services/justify-engine";
 import { IRateLimitStore } from "@rate-limiter/rate-limit-store.interface";
 import { InMemoryRateLimiterStore } from "@rate-limiter/impl/in-memory-rate-limit-store";
 import { RedisRateLimiterStore } from "@rate-limiter/impl/redis-rate-limit-store";
+import { IncomingMessage, Server, ServerResponse } from "http";
 
 const app = express();
 const PORT = process.env.PORT || 3000;
-const JWT_SECRET = process.env.JWT_SECRET || "super-secret-key";
+const getJwtSecret = () => process.env.JWT_SECRET || "super-secret-key";
 
 // Swagger configuration
 const swaggerOptions = {
@@ -31,7 +32,11 @@ const swaggerOptions = {
       },
     },
   },
-  apis: [process.env.NODE_ENV === "production" ? "./dist/server.js" : "./src/server.ts"], // files containing annotations
+  apis: [
+    process.env.NODE_ENV === "production"
+      ? "./dist/server.js"
+      : "./src/server.ts",
+  ], // files containing annotations
 };
 
 const swaggerSpec = swaggerJsdoc(swaggerOptions);
@@ -43,9 +48,9 @@ app.use(express.text());
 
 // Initialize store based on environment
 const REDIS_URL = process.env.REDIS_URL;
-export const rateLimitStore: IRateLimitStore = REDIS_URL 
-    ? new RedisRateLimiterStore(REDIS_URL) 
-    : new InMemoryRateLimiterStore();
+export const rateLimitStore: IRateLimitStore = REDIS_URL
+  ? new RedisRateLimiterStore(REDIS_URL)
+  : new InMemoryRateLimiterStore();
 
 const DAILY_WORD_LIMIT = 80000;
 
@@ -58,7 +63,7 @@ const authenticateToken = (req: Request, res: Response, next: NextFunction) => {
 
   if (!token) return res.sendStatus(401);
 
-  jwt.verify(token, JWT_SECRET, (err: any, user: any) => {
+  jwt.verify(token, getJwtSecret(), (err: any, user: any) => {
     if (err) return res.sendStatus(403);
     (req as any).user = user;
     (req as any).token = token;
@@ -73,7 +78,7 @@ const rateLimiter = async (req: Request, res: Response, next: NextFunction) => {
   const user = (req as any).user;
   const text = req.body;
 
-  if (typeof text !== "string") {
+  if (typeof text !== "string" || text.trim().length === 0) {
     return res.status(400).send("Request body must be plain text");
   }
 
@@ -81,7 +86,10 @@ const rateLimiter = async (req: Request, res: Response, next: NextFunction) => {
   const today = new Date().toISOString().split("T")[0];
 
   try {
-    const currentWordCount = await rateLimitStore.getWordCount(user.email, today);
+    const currentWordCount = await rateLimitStore.getWordCount(
+      user.email,
+      today
+    );
 
     if (currentWordCount + wordCount > DAILY_WORD_LIMIT) {
       return res.status(402).send("Payment Required: Rate limit exceeded");
@@ -128,7 +136,7 @@ app.post("/api/token", (req: Request, res: Response) => {
     return res.status(400).send("Email is required");
   }
 
-  const token = jwt.sign({ email }, JWT_SECRET);
+  const token = jwt.sign({ email }, getJwtSecret());
   res.json({ token });
 });
 
@@ -175,9 +183,12 @@ app.post(
   }
 );
 
-const server = app.listen(PORT, () => {
-  console.log(`Server is running on port ${PORT}`);
-});
+let server: Server<typeof IncomingMessage, typeof ServerResponse>;
+if (process.env.NODE_ENV !== "test") {
+  server = app.listen(PORT, () => {
+    console.log(`Server is running on port ${PORT}`);
+  });
+}
 
 export default app;
 export { server };
