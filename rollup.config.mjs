@@ -36,5 +36,5 @@ export default {
     }),
     terser(),
   ],
-  external: ['express', 'jsonwebtoken', 'redis', 'swagger-jsdoc', 'swagger-ui-express'],
+  external: ['express', 'jsonwebtoken', 'redis', 'swagger-jsdoc', 'swagger-ui-express', 'morgan'],
 };
