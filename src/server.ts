@@ -31,7 +31,7 @@ const swaggerOptions = {
       },
     },
   },
-  apis: ["./src/server.ts"], // files containing annotations
+  apis: [process.env.NODE_ENV === "production" ? "./dist/server.js" : "./src/server.ts"], // files containing annotations
 };
 
 const swaggerSpec = swaggerJsdoc(swaggerOptions);

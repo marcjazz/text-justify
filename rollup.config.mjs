@@ -2,7 +2,6 @@ import typescript from '@rollup/plugin-typescript';
 import resolve from '@rollup/plugin-node-resolve';
 import commonjs from '@rollup/plugin-commonjs';
 import json from '@rollup/plugin-json';
-import terser from '@rollup/plugin-terser';
 import alias from '@rollup/plugin-alias';
 import path from 'path';
 import { fileURLToPath } from 'url';
@@ -34,7 +33,7 @@ export default {
       tsconfig: './tsconfig.json',
       declaration: false,
     }),
-    terser(),
+    // terser(),
   ],
   external: ['express', 'jsonwebtoken', 'redis', 'swagger-jsdoc', 'swagger-ui-express', 'morgan'],
 };
