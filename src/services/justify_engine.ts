@@ -52,10 +52,8 @@ export function justifyText(text: string, maxLength: number): string[] {
 
     // Last line or single word line: Left-aligned
     if (isLastLine || wordCount === 1) {
-      if (!isLastLine || wordCount !== 2) {
-        const result = line.join(" ");
-        return result.padEnd(maxLength, " ");
-      }
+      const result = line.join(" ");
+      return result.padEnd(maxLength, " ");
     }
 
     // Normal line justification
