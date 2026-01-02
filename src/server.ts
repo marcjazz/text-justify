@@ -1,6 +1,8 @@
 import express, { Request, Response, NextFunction } from "express";
 import jwt from "jsonwebtoken";
 import { justifyText } from "./services/justify_engine";
+import { IRateLimitStore } from "./services/rate-limit-store.interface";
+import { InMemoryRateLimitStore } from "./services/in-memory-rate-limit-store";
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -9,9 +11,7 @@ const getJwtSecret = () => process.env.JWT_SECRET || "super-secret-key";
 app.use(express.text());
 app.use(express.json());
 
-// In-memory store for rate limiting: { token: { count: number, date: string } }
-export const rateLimitStore: Record<string, { count: number; date: string }> =
-  {};
+export const rateLimitStore: IRateLimitStore = new InMemoryRateLimitStore();
 const DAILY_WORD_LIMIT = 80000;
 
 /**
@@ -48,11 +48,13 @@ const authenticateToken = (req: Request, res: Response, next: NextFunction) => {
 /**
  * Middleware: Rate Limiting
  */
-const rateLimiter = (req: Request, res: Response, next: NextFunction) => {
+const rateLimiter = async (req: Request, res: Response, next: NextFunction) => {
   const token = (req as any).token;
   const text = req.body;
 
   if (typeof text !== "string") {
+    // This case should ideally be caught by validateRequestBody before,
+    // but a non-text content-type might bypass validateRequestBody if it's placed after express.json
     return res.status(400).send("Request body must be plain text");
   }
 
@@ -62,16 +64,20 @@ const rateLimiter = (req: Request, res: Response, next: NextFunction) => {
     .filter((w) => w.length > 0).length;
   const today = new Date().toISOString().split("T")[0];
 
-  if (!rateLimitStore[token] || rateLimitStore[token].date !== today) {
-    rateLimitStore[token] = { count: 0, date: today };
-  }
+  try {
+    const currentWordCount = await rateLimitStore.getWordCount(token, today);
 
-  if (rateLimitStore[token].count + wordCount > DAILY_WORD_LIMIT) {
-    return res.status(402).send("Payment Required: Rate limit exceeded");
-  }
+    if (currentWordCount + wordCount > DAILY_WORD_LIMIT) {
+      return res.status(402).send("Payment Required: Rate limit exceeded");
+    }
 
-  (req as any).wordCount = wordCount;
-  next();
+    await rateLimitStore.incrementWordCount(token, wordCount, today);
+    (req as any).wordCount = wordCount;
+    next();
+  } catch (error) {
+    console.error("Rate Limiter Error:", error);
+    res.status(500).send("Internal Server Error");
+  }
 };
 
 /**
@@ -103,7 +109,8 @@ app.post(
 
     try {
       const justifiedLines = justifyText(text, 80);
-      rateLimitStore[token].count += wordCount;
+      // The rateLimitStore.incrementWordCount is now handled inside the rateLimiter middleware,
+      // so we don't need to do it here again.
       res.type("text/plain").send(justifiedLines.join("\n"));
     } catch (error: any) {
       res.status(500).send(error.message);
@@ -117,3 +124,6 @@ const server = app.listen(PORT, () => {
 
 export default app;
 export { server };
+
+
+
