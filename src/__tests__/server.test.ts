@@ -108,6 +108,7 @@ describe('API Endpoints', () => {
     const textToJustify = 'This is a sample text.';
     const res = await request(app)
       .post('/api/justify')
+      .set('Authorization', `Bearer ${token}`)
       .set('Content-Type', 'text/plain')
       .send(textToJustify);
 
@@ -221,6 +222,36 @@ describe('API Endpoints', () => {
 
     expect(res.statusCode).toEqual(500);
     expect(res.text).toContain('Internal Server Error');
+  });
+
+  it('should correctly filter out empty strings from word count', async () => {
+    token = 'mock-token';
+    // Mock String.prototype.split to return an array that includes an empty string
+    // This will force the `w.length > 0` predicate in filter to return false for one element
+    const originalSplit = String.prototype.split;
+    (String.prototype.split as any) = jest.fn((separator) => {
+      if (separator && separator.source === '\\s+') {
+        return ['word1', '', 'word2']; // Inject an empty string
+      }
+      return originalSplit.call(this, separator);
+    });
+
+    try {
+      // We expect 2 words from 'word1', '', 'word2'
+      // Mock getWordCount to ensure the rate limiter allows the request
+      (rateLimitStore.getWordCount as jest.Mock).mockResolvedValue(0);
+
+      const res = await request(app)
+        .post('/api/justify')
+        .set('Authorization', `Bearer ${token}`)
+        .set('Content-Type', 'text/plain')
+        .send('word1 word2'); // Actual text doesn't matter much as split is mocked
+
+      expect(res.statusCode).toEqual(200);
+      expect(rateLimitStore.incrementWordCount).toHaveBeenCalledWith(token, 2, expect.any(String)); // Check wordCount
+    } finally {
+      String.prototype.split = originalSplit; // Restore original split
+    }
   });
 });
 
